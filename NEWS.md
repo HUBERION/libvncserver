@@ -1,3 +1,13 @@
+# 2026-06-10: Version 0.9.16
+
+0.9.16 is a release roll-up that includes refreshed build artifacts for the sample
+executables.
+
+## Overall changes:
+
+  * Incremented project version to 0.9.16.
+  * Added Linux x86_64 sample executable artifacts under `release/linux-x86_64/`.
+
 # 2024-12-22: Version 0.9.15
 
 0.9.15 sees some internal code structure cleanup, UTF-8 clipboard handling improvements
