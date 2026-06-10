@@ -597,6 +597,13 @@ if(ANDROID)
   )
 endif(ANDROID)
 
+if(WIN32)
+  set(LIBVNCSERVER_EXAMPLES
+    ${LIBVNCSERVER_EXAMPLES}
+    screencapture_win
+  )
+endif(WIN32)
+
 if(X11_xcb_FOUND AND X11_xcb_xtest_FOUND AND X11_xcb_keysyms_FOUND)
   set(LIBVNCSERVER_EXAMPLES
     ${LIBVNCSERVER_EXAMPLES}
