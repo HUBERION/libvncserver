@@ -39,11 +39,11 @@
 #define TARGET_FPS 15
 
 /* -------------------------------------------------------------------------
- * Global XCB connection used by the input-forwarding callbacks.
- * Using a global avoids the need to pass it through rfbClientPtr->clientData
- * just for this straightforward example.
+ * Global XCB connection and key-symbol table used by the input callbacks.
+ * Allocated once at startup to avoid a server round-trip per keystroke.
  * ------------------------------------------------------------------------- */
-static xcb_connection_t *g_conn = NULL;
+static xcb_connection_t  *g_conn    = NULL;
+static xcb_key_symbols_t *g_keysyms = NULL;
 
 /* =========================================================================
  * Screen capture helpers
@@ -133,21 +133,18 @@ static void update_framebuffer(rfbScreenInfoPtr screen,
 
 static void send_key(xcb_connection_t *conn, xcb_keysym_t keysym, int press)
 {
-    xcb_key_symbols_t *syms = xcb_key_symbols_alloc(conn);
-    xcb_keycode_t     *codes = xcb_key_symbols_get_keycode(syms, keysym);
+    xcb_keycode_t *codes = xcb_key_symbols_get_keycode(g_keysyms, keysym);
 
-    if (codes) {
-        for (xcb_keycode_t *kc = codes; *kc != XCB_NO_SYMBOL; kc++) {
-            xcb_test_fake_input(conn,
-                                press ? XCB_KEY_PRESS : XCB_KEY_RELEASE,
-                                *kc,
-                                XCB_CURRENT_TIME,
-                                XCB_NONE, 0, 0, 0);
-        }
-        free(codes);
+    if (codes && codes[0] != XCB_NO_SYMBOL) {
+        /* Use only the first matching keycode to avoid duplicate events. */
+        xcb_test_fake_input(conn,
+                            press ? XCB_KEY_PRESS : XCB_KEY_RELEASE,
+                            codes[0],
+                            XCB_CURRENT_TIME,
+                            XCB_NONE, 0, 0, 0);
     }
 
-    xcb_key_symbols_free(syms);
+    free(codes);
     xcb_flush(conn);
 }
 
@@ -187,20 +184,26 @@ static void pointer_callback(int buttonMask, int x, int y,
 {
     (void)client;
 
-    /* Forward each button individually; XTest needs a separate event per
-     * button state change. */
-    send_button(g_conn, XCB_BUTTON_INDEX_1,
-                !!(buttonMask & rfbButton1Mask));
-    send_button(g_conn, XCB_BUTTON_INDEX_2,
-                !!(buttonMask & rfbButton2Mask));
-    send_button(g_conn, XCB_BUTTON_INDEX_3,
-                !!(buttonMask & rfbButton3Mask));
-    /* Scroll wheel: button 4 = up, 5 = down */
-    send_button(g_conn, XCB_BUTTON_INDEX_4,
-                !!(buttonMask & rfbWheelUpMask));
-    send_button(g_conn, XCB_BUTTON_INDEX_5,
-                !!(buttonMask & rfbWheelDownMask));
+    /* Only emit press/release events for buttons whose state changed. */
+    static int prev_mask = 0;
+    int changed = buttonMask ^ prev_mask;
 
+    if (changed & rfbButton1Mask)
+        send_button(g_conn, XCB_BUTTON_INDEX_1,
+                    !!(buttonMask & rfbButton1Mask));
+    if (changed & rfbButton2Mask)
+        send_button(g_conn, XCB_BUTTON_INDEX_2,
+                    !!(buttonMask & rfbButton2Mask));
+    if (changed & rfbButton3Mask)
+        send_button(g_conn, XCB_BUTTON_INDEX_3,
+                    !!(buttonMask & rfbButton3Mask));
+    /* Scroll wheel buttons are momentary; treat them as unconditional. */
+    if (buttonMask & rfbWheelUpMask)
+        send_button(g_conn, XCB_BUTTON_INDEX_4, 1);
+    if (buttonMask & rfbWheelDownMask)
+        send_button(g_conn, XCB_BUTTON_INDEX_5, 1);
+
+    prev_mask = buttonMask;
     send_motion(g_conn, (int16_t)x, (int16_t)y);
 }
 
@@ -214,6 +217,14 @@ int main(int argc, char *argv[])
     g_conn = xcb_connect(NULL, NULL);
     if (xcb_connection_has_error(g_conn)) {
         fprintf(stderr, "screencapture: cannot connect to X display\n");
+        return EXIT_FAILURE;
+    }
+
+    /* Allocate the key-symbol table once; reused for every keystroke. */
+    g_keysyms = xcb_key_symbols_alloc(g_conn);
+    if (!g_keysyms) {
+        fprintf(stderr, "screencapture: xcb_key_symbols_alloc failed\n");
+        xcb_disconnect(g_conn);
         return EXIT_FAILURE;
     }
 
@@ -286,6 +297,7 @@ int main(int argc, char *argv[])
     free(rfb->frameBuffer);
     rfbScreenCleanup(rfb);
     free(capture_buf);
+    xcb_key_symbols_free(g_keysyms);
     xcb_disconnect(g_conn);
 
     return EXIT_SUCCESS;
