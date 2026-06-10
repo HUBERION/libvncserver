@@ -117,7 +117,7 @@ static void capture_screen(uint8_t *dst, int width, int height)
     BitBlt(g_mem_dc, 0, 0, width, height,
            g_screen_dc, g_virt_x, g_virt_y, SRCCOPY | CAPTUREBLT);
 
-    /* Convert BGR0 -> RGBX in-place */
+    /* Convert BGR0 (g_bits) -> RGBX (dst) */
     const uint32_t npixels = (uint32_t)width * height;
     for (uint32_t i = 0; i < npixels; i++) {
         uint8_t b = g_bits[i * 4 + 0];
@@ -242,8 +242,6 @@ static void keyboard_callback(rfbBool down, rfbKeySym keysym,
 static void pointer_callback(int buttonMask, int x, int y,
                               rfbClientPtr client)
 {
-    (void)client;
-
     int width  = client->screen->width;
     int height = client->screen->height;
 
@@ -316,10 +314,9 @@ static void pointer_callback(int buttonMask, int x, int y,
 int main(int argc, char *argv[])
 {
     /* On High-DPI systems, opt out of scaling so captured and injected
-     * coordinates are in physical pixels, matching what clients see. */
-#if defined(SetProcessDPIAware)
+     * coordinates are in physical pixels, matching what clients see.
+     * Available since Windows Vista; unconditional call is safe. */
     SetProcessDPIAware();
-#endif
 
     /* --- Initialise GDI screen capture --- */
     int width = 0, height = 0;
