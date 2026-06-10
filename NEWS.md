@@ -7,6 +7,7 @@ executables.
 
   * Incremented project version to 0.9.16.
   * Added Linux x86_64 sample executable artifacts under `release/linux-x86_64/`.
+  * Added Windows x86_64 sample executable artifacts under `release/windows-x86_64/`.
 
 # 2024-12-22: Version 0.9.15
 
